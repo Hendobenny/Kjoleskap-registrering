@@ -259,6 +259,7 @@ function toggleTheme() {
 let state = {
   people: [],
   periods: {},
+  activePeriod: currentPeriod(),   // oppdateres av serveren ved oppstart
   view: 'home',
   search: '',
   lastPerson: null,
@@ -281,13 +282,17 @@ async function loadState() {
   try {
     state.loading = true;
     render();
-    const [people, periods] = await Promise.all([
+    const [people, periods, periodRes] = await Promise.all([
       apiFetch('/api/people'),
-      apiFetch('/api/periods')
+      apiFetch('/api/periods'),
+      apiFetch('/api/period/current')
     ]);
     state.people = people;
-    // Last inn tellere for alle perioder
-    const counts = await Promise.all(periods.map(p => apiFetch(`/api/counts/${p}`).then(c => [p, c])));
+    state.activePeriod = periodRes.period;
+    state.selectedPeriod = periodRes.period;
+    // Sørg for at aktiv periode er inkludert
+    const allPeriods = periods.includes(periodRes.period) ? periods : [periodRes.period, ...periods];
+    const counts = await Promise.all(allPeriods.map(p => apiFetch(`/api/counts/${p}`).then(c => [p, c])));
     state.periods = Object.fromEntries(counts);
     state.loading = false;
     state.apiError = false;
@@ -345,7 +350,7 @@ async function takeBrus(person) {
     return;
   }
   try {
-    const count = await saveCount(currentPeriod(), person, 1);
+    const count = await saveCount(state.activePeriod, person, 1);
     state.lastPerson = person;
     state.view = 'thanks';
     state.search = '';
@@ -364,7 +369,7 @@ async function confirmQuantity() {
     return;
   }
   try {
-    await saveCount(currentPeriod(), state.lastPerson, qty);
+    await saveCount(state.activePeriod, state.lastPerson, qty);
     state.lastQty = qty;
     state.view = 'thanks';
     render();
@@ -377,7 +382,7 @@ function tryPin() {
   const val = document.getElementById('pin-inp').value;
   if (val === ADMIN_PIN) {
     state.pinError=false; state.sortMode='default'; state.adminTab='current';
-    state.selectedPeriod=currentPeriod(); state.view='admin'; render();
+    state.selectedPeriod=state.activePeriod; state.view='admin'; render();
   } else {
     state.pinError=true; render();
     setTimeout(()=>{ const i=document.getElementById('pin-inp'); if(i) i.focus(); },0);
@@ -388,9 +393,9 @@ function adminLogout() { state.view='home'; render(); }
 function setAdminTab(tab) {
   state.adminTab=tab;
   if (tab==='history') {
-    const past=allPeriodsSorted().filter(p=>p!==currentPeriod());
-    if (past.length && state.selectedPeriod===currentPeriod()) state.selectedPeriod=past[0];
-  } else { state.selectedPeriod=currentPeriod(); }
+    const past=allPeriodsSorted().filter(p=>p!==state.activePeriod);
+    if (past.length && state.selectedPeriod===state.activePeriod) state.selectedPeriod=past[0];
+  } else { state.selectedPeriod=state.activePeriod; }
   renderAdminBody();
 }
 function onPeriodChange(val) { state.selectedPeriod=val; renderPeriodView(); }
@@ -408,11 +413,11 @@ function setSortMode(mode) {
 }
 
 async function addCount(person, delta) {
-  const counts = getCountsFor(currentPeriod());
+  const counts = getCountsFor(state.activePeriod);
   const current = counts[person] || 0;
   if (current + delta < 0) return;
   try {
-    await saveCount(currentPeriod(), person, delta);
+    await saveCount(state.activePeriod, person, delta);
     renderCurrentList();
   } catch(e) {
     alert('Kunne ikke oppdatere. Sjekk nettverkstilkobling.');
@@ -488,10 +493,10 @@ async function submitRename(oldName) {
   }
 }
 async function resetCurrentPeriod() {
-  if (!confirm('Nullstill alle tellere for '+periodLabel(currentPeriod())+'?\n\nHistorikken beholdes.')) return;
+  if (!confirm('Nullstill alle tellere for '+periodLabel(state.activePeriod)+'?\n\nHistorikken beholdes.')) return;
   try {
-    await apiFetch(`/api/counts/${currentPeriod()}`, { method: 'DELETE' });
-    state.periods[currentPeriod()]={};
+    await apiFetch(`/api/counts/${state.activePeriod}`, { method: 'DELETE' });
+    state.periods[state.activePeriod]={};
     renderCurrentList();
   } catch(e) {
     alert('Kunne ikke nullstille periode.');
@@ -605,7 +610,7 @@ function metricCards(counts,idA,idB) {
 }
 
 function renderCurrentList() {
-  const counts=getCountsFor(currentPeriod());
+  const counts=getCountsFor(state.activePeriod);
   const total=state.people.reduce((s,p)=>s+(counts[p]||0),0);
   const el=document.getElementById('current-list'); if(el) el.innerHTML=personRowsEditable(counts);
   const tc=document.getElementById('cur-total-count'); if(tc) tc.textContent=total;
@@ -620,8 +625,8 @@ function renderPeriodView() {
 
 function renderAdminBody() {
   const el=document.getElementById('admin-body'); if(!el) return;
-  const past=allPeriodsSorted().filter(p=>p!==currentPeriod());
-  const counts=getCountsFor(currentPeriod());
+  const past=allPeriodsSorted().filter(p=>p!==state.activePeriod);
+  const counts=getCountsFor(state.activePeriod);
   if (state.adminTab==='current') {
     el.innerHTML=`
       ${metricCards(counts,'cur-total-count','cur-total-kr')}
@@ -639,7 +644,7 @@ function renderAdminBody() {
         <button onclick="addPersonAdmin()" style="flex-shrink:0;">+ Legg til</button>
       </div>
       <button onclick="resetCurrentPeriod()" style="width:100%;padding:12px;color:var(--c-error);border-color:var(--c-error);background:var(--c-error-muted);font-family:'Outfit',sans-serif;font-size:0.875rem;">
-        Nullstill ${periodLabel(currentPeriod())} etter lønntrekk
+        Nullstill ${periodLabel(state.activePeriod)} etter lønntrekk
       </button>`;
   } else {
     el.innerHTML=past.length===0
@@ -830,7 +835,7 @@ function render() {
 
   } else if (state.view==='thanks') {
     const name=state.lastPerson||'';
-    const count=getCountsFor(currentPeriod())[name]||0;
+    const count=getCountsFor(state.activePeriod)[name]||0;
     const isMulti=MULTI_REGISTER.includes(name);
     const qty=state.lastQty||1;
     app.innerHTML=`
@@ -840,7 +845,7 @@ function render() {
         </div>
         <span class="overline">Registrert</span>
         <h1 style="font-family:'Outfit',sans-serif;font-size:1.5rem;font-weight:700;margin:0.5rem 0 0.35rem;">${name}</h1>
-        <p style="font-size:0.9375rem;color:var(--c-text-2);margin:0 0 2rem;">${isMulti ? qty+' mineralvann lagt til i '+periodLabel(currentPeriod()) : 'Mineralvann lagt til i '+periodLabel(currentPeriod())}</p>
+        <p style="font-size:0.9375rem;color:var(--c-text-2);margin:0 0 2rem;">${isMulti ? qty+' mineralvann lagt til i '+periodLabel(state.activePeriod) : 'Mineralvann lagt til i '+periodLabel(state.activePeriod)}</p>
         ${isMulti ? `
         <div style="background:var(--c-surface-1);border:1px solid var(--c-border);border-radius:var(--radius-xl);padding:1.5rem;display:inline-block;min-width:200px;margin-bottom:2rem;">
           <div class="metric-label" style="margin-bottom:8px;">Registrert nå</div>
@@ -870,7 +875,7 @@ function render() {
       <div class="tab-bar">
         <button class="tab-btn ${state.adminTab==='current'?'active':''}" onclick="setAdminTab('current')">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          ${periodLabel(currentPeriod())}
+          ${periodLabel(state.activePeriod)}
         </button>
         <button class="tab-btn ${state.adminTab==='history'?'active':''}" onclick="setAdminTab('history')">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

@@ -51,6 +51,13 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// GET aktiv periode — styrt av servertid, ikke klientens klokke
+app.get('/api/period/current', (req, res) => {
+  const d = new Date();
+  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  res.json({ period });
+});
+
 // GET alle ansatte
 app.get('/api/people', (req, res) => {
   const data = loadData();
