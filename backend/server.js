@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'data.json');
+const DATA_FILE = process.env.DATA_PATH || path.join('/app/data', 'data.json');
 
 // --- Middleware ---
 app.use(cors());
@@ -174,6 +174,12 @@ app.delete('/api/people/:name', (req, res) => {
 // --- Start ---
 app.listen(PORT, () => {
   console.log(`Kjøleskap backend kjører på port ${PORT}`);
+  // Sørg for at data-mappen eksisterer
+  const dataDir = path.dirname(DATA_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log(`Opprettet mappe: ${dataDir}`);
+  }
   // Seed data.json hvis den ikke finnes
   if (!fs.existsSync(DATA_FILE)) {
     const initial = {
