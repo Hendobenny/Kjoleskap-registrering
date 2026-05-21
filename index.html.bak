@@ -213,26 +213,9 @@
 <script>
 const PRICE = 20;
 const ADMIN_PIN = '1234';
+const STORAGE_KEY = 'brus_v6';
 const THEME_KEY = 'brus_theme';
 const MONTH_NAMES = ['Januar','Februar','Mars','April','Mai','Juni','Juli','August','September','Oktober','November','Desember'];
-
-// --- API ---
-// Sett til Railway-URL etter deploy, f.eks.: const API_URL = 'https://kjoleskap.up.railway.app';
-const API_URL = window.KJOLESKAP_API_URL || 'http://localhost:3000';
-
-async function apiFetch(path, options = {}) {
-  try {
-    const res = await fetch(API_URL + path, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (e) {
-    console.error('API-feil:', path, e);
-    throw e;
-  }
-}
 
 function currentPeriod() {
   const d = new Date();
@@ -268,67 +251,61 @@ let state = {
   selectedPeriod: currentPeriod(),
   showRegister: false,
   registerError: '',
-  renamingPerson: null,
-  loading: true,
-  apiError: false
+  renamingPerson: null
 };
+
+const REAL_PEOPLE = [
+  'Eva','Benjamin','Bjarte','Kristine','Madelen','Morten','David',
+  'Lyubka','Estera','Marianne','Monica','Silje','Sylwia',
+  'Janine','Anne','Marte','Ann Elin','KL eller Møte'
+];
 
 let MULTI_REGISTER = ['KL eller Møte'];
 
-// --- API data functions ---
+const SEED_VERSION = 'v7';
 
-async function loadState() {
+function seedHistoryData() {
+  // Always overwrite history periods with real data (version-gated)
+  state.periods['2026-03'] = {
+    'Eva':7,'Benjamin':4,'Bjarte':13,'Kristine':2,'Madelen':4,
+    'Morten':6,'David':4,'Lyubka':3,'Utgått dato':2,'Estera':1,
+    'Marianne':6,'Monica':1,'Silje':1,'Møte Økonomi':9,'KL eller Møte':7,'Sylwia':2
+  };
+  state.periods['2026-04'] = {
+    'Bjarte':13,'Morten':5,'David':6,'Sylwia':1,'Eva':4,
+    'Marianne':5,'Estera':4,'Kristine':4,'Madelen':3,'Janine':1,
+    'Anne':1,'Lyubka':2,'Marte':1,'Ann Elin':1,'Benjamin':1,'KL eller Møte':8
+  };
+  localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION);
+}
+
+const SEED_VERSION_KEY = 'brus_seed_ver';
+
+function loadState() {
   try {
-    state.loading = true;
-    render();
-    const [people, periods] = await Promise.all([
-      apiFetch('/api/people'),
-      apiFetch('/api/periods')
-    ]);
-    state.people = people;
-    // Last inn tellere for alle perioder
-    const counts = await Promise.all(periods.map(p => apiFetch(`/api/counts/${p}`).then(c => [p, c])));
-    state.periods = Object.fromEntries(counts);
-    state.loading = false;
-    state.apiError = false;
-  } catch(e) {
-    state.loading = false;
-    state.apiError = true;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const s=JSON.parse(raw); state.people=s.people||[]; state.periods=s.periods||{}; }
+    if (!state.people.length) state.people = [...REAL_PEOPLE];
+  } catch(e) { state.people = [...REAL_PEOPLE]; }
+
+  // Re-seed history if not yet on current seed version
+  const seeded = localStorage.getItem(SEED_VERSION_KEY);
+  if (seeded !== SEED_VERSION) {
+    seedHistoryData();
+    // Always update people list to latest real names on version bump
+    state.people = [...REAL_PEOPLE];
+    save();
   }
-  render();
 }
 
-async function savePeople() {
-  await apiFetch('/api/people', {
-    method: 'POST',
-    body: JSON.stringify({ people: state.people })
-  });
-}
-
-async function saveCount(period, person, delta) {
-  const result = await apiFetch(`/api/counts/${period}`, {
-    method: 'POST',
-    body: JSON.stringify({ person, delta })
-  });
-  if (!state.periods[period]) state.periods[period] = {};
-  state.periods[period][person] = result.count;
-  return result.count;
-}
-
-async function setCount(period, person, count) {
-  await apiFetch(`/api/counts/${period}/${encodeURIComponent(person)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ count })
-  });
-  if (!state.periods[period]) state.periods[period] = {};
-  state.periods[period][person] = count;
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({people: state.people, periods: state.periods})); } catch(e){}
 }
 
 function getCountsFor(period) {
   if (!state.periods[period]) state.periods[period] = {};
   return state.periods[period];
 }
-
 function allPeriodsSorted() {
   return Object.keys(state.periods).sort((a,b) => b.localeCompare(a));
 }
@@ -336,7 +313,7 @@ function allPeriodsSorted() {
 function setView(v) { state.search=''; state.pinError=false; state.showRegister=false; state.registerError=''; state.view=v; render(); }
 function goHome() { state.search=''; state.showRegister=false; state.registerError=''; state.view='home'; render(); }
 
-async function takeBrus(person) {
+function takeBrus(person) {
   if (MULTI_REGISTER.includes(person)) {
     state.lastPerson = person;
     state.view = 'quantity';
@@ -344,18 +321,16 @@ async function takeBrus(person) {
     render();
     return;
   }
-  try {
-    const count = await saveCount(currentPeriod(), person, 1);
-    state.lastPerson = person;
-    state.view = 'thanks';
-    state.search = '';
-    render();
-  } catch(e) {
-    alert('Kunne ikke registrere. Sjekk nettverkstilkobling.');
-  }
+  const counts = getCountsFor(currentPeriod());
+  counts[person] = (counts[person]||0) + 1;
+  save();
+  state.lastPerson = person;
+  state.view = 'thanks';
+  state.search = '';
+  render();
 }
 
-async function confirmQuantity() {
+function confirmQuantity() {
   const inp = document.getElementById('qty-inp');
   const qty = parseInt(inp ? inp.value : 0);
   if (!qty || qty < 1) {
@@ -363,14 +338,12 @@ async function confirmQuantity() {
     if (err) err.style.display = 'block';
     return;
   }
-  try {
-    await saveCount(currentPeriod(), state.lastPerson, qty);
-    state.lastQty = qty;
-    state.view = 'thanks';
-    render();
-  } catch(e) {
-    alert('Kunne ikke registrere. Sjekk nettverkstilkobling.');
-  }
+  const counts = getCountsFor(currentPeriod());
+  counts[state.lastPerson] = (counts[state.lastPerson]||0) + qty;
+  state.lastQty = qty;
+  save();
+  state.view = 'thanks';
+  render();
 }
 
 function tryPin() {
@@ -407,44 +380,24 @@ function setSortMode(mode) {
   renderCurrentList();
 }
 
-async function addCount(person, delta) {
-  const counts = getCountsFor(currentPeriod());
-  const current = counts[person] || 0;
-  if (current + delta < 0) return;
-  try {
-    await saveCount(currentPeriod(), person, delta);
-    renderCurrentList();
-  } catch(e) {
-    alert('Kunne ikke oppdatere. Sjekk nettverkstilkobling.');
-  }
+function addCount(person, delta) {
+  const counts=getCountsFor(currentPeriod());
+  const next=(counts[person]||0)+delta;
+  if (next<0) return;
+  counts[person]=next; save(); renderCurrentList();
 }
 
-async function addPersonAdmin() {
+function addPersonAdmin() {
   const inp=document.getElementById('np');
   const name=inp.value.trim();
   if (!name) return;
   if (state.people.some(p=>p.toLowerCase()===name.toLowerCase())) return;
-  state.people.push(name);
-  inp.value='';
-  try {
-    await savePeople();
-    renderCurrentList();
-  } catch(e) {
-    state.people.pop();
-    alert('Kunne ikke legge til ansatt.');
-  }
+  state.people.push(name); inp.value=''; save(); renderCurrentList();
 }
 
-async function removePerson(p) {
+function removePerson(p) {
   if (!confirm('Fjern '+p+'?')) return;
-  state.people=state.people.filter(x=>x!==p);
-  try {
-    await apiFetch(`/api/people/${encodeURIComponent(p)}`, { method: 'DELETE' });
-    renderCurrentList();
-  } catch(e) {
-    alert('Kunne ikke fjerne ansatt.');
-    await loadState();
-  }
+  state.people=state.people.filter(x=>x!==p); save(); renderCurrentList();
 }
 
 function nameToId(p) { return p.replace(/[^a-zA-Z0-9]/g,'-'); }
@@ -455,17 +408,14 @@ function startRename(p) {
   setTimeout(() => { const i=document.getElementById('rename-inp-'+nameToId(p)); if(i){i.focus();i.select();} }, 0);
 }
 
-async function submitRename(oldName) {
+function submitRename(oldName) {
   const inp = document.getElementById('rename-inp-'+nameToId(oldName));
   if (!inp) return;
   const newName = inp.value.trim();
   if (!newName || newName===oldName) { state.renamingPerson=null; renderCurrentList(); return; }
   if (state.people.some(p=>p.toLowerCase()===newName.toLowerCase()&&p!==oldName)) { inp.style.borderColor='var(--c-error)'; return; }
-
   const idx=state.people.indexOf(oldName);
   if (idx!==-1) state.people[idx]=newName;
-
-  // Oppdater lokalt state
   Object.keys(state.periods).forEach(period=>{
     if (state.periods[period][oldName]!==undefined) {
       state.periods[period][newName]=state.periods[period][oldName];
@@ -474,28 +424,11 @@ async function submitRename(oldName) {
   });
   const mrIdx=MULTI_REGISTER.indexOf(oldName);
   if (mrIdx!==-1) MULTI_REGISTER[mrIdx]=newName;
-  state.renamingPerson=null;
-
-  try {
-    await apiFetch('/api/people/rename', {
-      method: 'POST',
-      body: JSON.stringify({ oldName, newName })
-    });
-    renderCurrentList();
-  } catch(e) {
-    alert('Kunne ikke gi nytt navn.');
-    await loadState();
-  }
+  state.renamingPerson=null; save(); renderCurrentList();
 }
-async function resetCurrentPeriod() {
+function resetCurrentPeriod() {
   if (!confirm('Nullstill alle tellere for '+periodLabel(currentPeriod())+'?\n\nHistorikken beholdes.')) return;
-  try {
-    await apiFetch(`/api/counts/${currentPeriod()}`, { method: 'DELETE' });
-    state.periods[currentPeriod()]={};
-    renderCurrentList();
-  } catch(e) {
-    alert('Kunne ikke nullstille periode.');
-  }
+  state.periods[currentPeriod()]={};  save(); renderCurrentList();
 }
 
 // Self-register
@@ -505,7 +438,7 @@ function toggleRegister() {
   render();
 }
 
-async function submitRegister() {
+function submitRegister() {
   const inp=document.getElementById('reg-inp');
   if (!inp) return;
   const name=inp.value.trim();
@@ -514,16 +447,10 @@ async function submitRegister() {
     state.registerError='Dette navnet er allerede registrert.'; renderRegisterPanel(); return;
   }
   state.people.push(name);
-  try {
-    await savePeople();
-    state.showRegister=false;
-    state.registerError='';
-    render();
-  } catch(e) {
-    state.people.pop();
-    state.registerError='Kunne ikke registrere. Prøv igjen.';
-    renderRegisterPanel();
-  }
+  save();
+  state.showRegister=false;
+  state.registerError='';
+  render();
 }
 
 function renderRegisterPanel() {
@@ -725,25 +652,6 @@ function onSearch(val) { state.search=val; render(); }
 function render() {
   const app=document.getElementById('app');
 
-  if (state.loading) {
-    app.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;">
-      <div style="width:40px;height:40px;border:3px solid var(--c-surface-3);border-top-color:var(--c-accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-      <p style="color:var(--c-text-3);font-family:'Outfit',sans-serif;">Laster data...</p>
-    </div>
-    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
-    return;
-  }
-
-  if (state.apiError) {
-    app.innerHTML=`<div style="text-align:center;padding:3rem 1rem;">
-      <p style="font-size:1.25rem;margin-bottom:0.5rem;">⚠️</p>
-      <h2 style="font-family:'Outfit',sans-serif;margin-bottom:0.5rem;">Kan ikke koble til server</h2>
-      <p style="color:var(--c-text-2);margin-bottom:1.5rem;">Sjekk at backend kjører og prøv igjen.</p>
-      <button onclick="loadState()" class="btn-accent" style="padding:11px 24px;">Prøv igjen</button>
-    </div>`;
-    return;
-  }
-
   if (state.view==='home') {
     const q=state.search.toLowerCase();
     const filtered=state.people.filter(p=>p.toLowerCase().includes(q));
@@ -888,6 +796,7 @@ document.getElementById('app').addEventListener('keydown', e => {
 
 initTheme();
 loadState();
+render();
 </script>
 </body>
 </html>
