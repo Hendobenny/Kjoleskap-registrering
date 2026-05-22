@@ -349,11 +349,18 @@ async function takeBrus(person) {
     render();
     return;
   }
+  // Vis bekreftelsesside med månedsantall
+  state.lastPerson = person;
+  state.search = '';
+  state.view = 'confirm';
+  render();
+}
+
+async function confirmBrus() {
+  const person = state.lastPerson;
   try {
-    const count = await saveCount(state.activePeriod, person, 1);
-    state.lastPerson = person;
+    await saveCount(state.activePeriod, person, 1);
     state.view = 'thanks';
-    state.search = '';
     render();
   } catch(e) {
     alert('Kunne ikke registrere. Sjekk nettverkstilkobling.');
@@ -809,6 +816,29 @@ function render() {
         </div>
       </div>`;
     setTimeout(()=>{ const i=document.getElementById('pin-inp'); if(i) i.focus(); },0);
+
+  } else if (state.view==='confirm') {
+    const name = state.lastPerson||'';
+    const current = getCountsFor(state.activePeriod)[name]||0;
+    app.innerHTML=`
+      <div style="text-align:center;padding:2.5rem 1rem 2rem;">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--c-surface-1);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--c-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+        </div>
+        <span class="overline">Registrer mineralvann</span>
+        <h1 style="font-family:'Outfit',sans-serif;font-size:1.75rem;font-weight:700;margin:0.5rem 0 0.25rem;">${name}</h1>
+        <p style="font-size:0.9375rem;color:var(--c-text-2);margin:0 0 2rem;">${periodLabel(state.activePeriod)}</p>
+        <div style="background:var(--c-surface-1);border:1px solid var(--c-border);border-radius:var(--radius-xl);padding:1.5rem 2rem;display:inline-block;min-width:200px;margin-bottom:2rem;">
+          <div class="metric-label" style="margin-bottom:8px;">Tatt denne måneden</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:3.5rem;font-weight:700;color:var(--c-text-1);line-height:1;">${current}</div>
+          <div style="font-size:0.875rem;color:var(--c-text-2);margin-top:6px;">mineralvann</div>
+        </div>
+        <p style="font-size:0.9375rem;color:var(--c-text-2);margin:0 0 1.5rem;">Vil du registrere én til?</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button onclick="goHome()" style="padding:13px 28px;font-size:1rem;">← Avbryt</button>
+          <button onclick="confirmBrus()" class="btn-accent" style="padding:13px 32px;font-size:1rem;font-weight:600;">Ja, registrer</button>
+        </div>
+      </div>`;
 
   } else if (state.view==='quantity') {
     const name = state.lastPerson||'';
