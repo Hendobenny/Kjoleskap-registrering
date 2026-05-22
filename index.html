@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -669,93 +669,61 @@ function renderAdminBody() {
   }
 }
 
-async function exportExcel() {
+function exportExcel() {
   const counts = getCountsFor(state.selectedPeriod);
   const label = periodLabel(state.selectedPeriod);
   const sorted = [...state.people].sort((a,b)=>(counts[b]||0)-(counts[a]||0));
   const total = sorted.reduce((s,p)=>s+(counts[p]||0),0);
 
-  if (typeof ExcelJS === 'undefined') {
-    alert('Excel-biblioteket lastes — prøv igjen om ett sekund.');
-    return;
+  const XLS = window.XLSXStyle || window.XLSX;
+  if (!XLS) { alert('Excel-biblioteket lastes — prøv igjen om ett sekund.'); return; }
+
+  const TITLE_BG = '92CDDC';
+  const HDR_BG   = 'DAEEF3';
+  const ZEBRA    = 'F5F4F1';
+  const TOTAL_BG = 'E8E7E4';
+
+  function c(v, t, bgRgb, bold, hAlign) {
+    return {
+      v, t: t||'s',
+      s: {
+        fill: { patternType:'solid', fgColor:{ rgb: bgRgb||'FFFFFF' } },
+        font: { name:'Calibri', sz:12, bold:!!bold, color:{ rgb:'000000' } },
+        alignment: { horizontal: hAlign||'left', vertical:'center' }
+      }
+    };
   }
 
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(label);
+  const ws = {};
+  ws['A1'] = c(`Mineralvann \u2014 ${label}`, 's', TITLE_BG, true, 'center');
+  ws['B1'] = c('', 's', TITLE_BG);
+  ws['C1'] = c('', 's', TITLE_BG);
+  ws['A2'] = c('Navn',       's', HDR_BG, false, 'left');
+  ws['B2'] = c('Antall',     's', HDR_BG, false, 'center');
+  ws['C2'] = c('Bel\u00f8p (kr)', 's', HDR_BG, false, 'right');
 
-  ws.columns = [
-    { width: 26 },
-    { width: 10 },
-    { width: 14 }
-  ];
-
-  const TITLE_BG = '92CDDC'; // original tittel-blå
-  const HDR_BG   = 'DAEEF3'; // original header-lysblå
-  const BLACK    = '000000';
-  const ZEBRA    = 'F5F4F1'; // lett grå annenhver rad
-  const TOTAL_BG = 'E8E7E4'; // grå totalrad
-
-  function darkCell(cell, value, bold, hAlign) {
-    cell.value = value;
-    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+TITLE_BG } };
-    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+BLACK } };
-    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
-  }
-
-  function hdrCell(cell, value, hAlign) {
-    cell.value = value;
-    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+HDR_BG } };
-    cell.font  = { name:'Calibri', size:12, bold:false, color:{ argb:'FF'+BLACK } };
-    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
-  }
-
-  function dataCell(cell, value, bgArgb, bold, hAlign) {
-    cell.value = value;
-    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: bgArgb } };
-    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+DARK } };
-    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
-  }
-
-  // Row 1: Title
-  const titleRow = ws.addRow(['', '', '']);
-  titleRow.height = 24;
-  ws.mergeCells('A1:C1');
-  darkCell(ws.getCell('A1'), `Mineralvann \u2014 ${label}`, true, 'center');
-
-  // Row 2: Headers
-  const hdrRow = ws.addRow(['', '', '']);
-  hdrRow.height = 20;
-  hdrCell(ws.getCell('A2'), 'Navn',        'left');
-  hdrCell(ws.getCell('B2'), 'Antall',      'center');
-  hdrCell(ws.getCell('C2'), 'Beløp (kr)',  'right');
-
-  // Data rows
   sorted.forEach((p, i) => {
-    const c = counts[p]||0;
-    const bg = 'FF' + (i % 2 === 0 ? 'FFFFFF' : ZEBRA);
-    const row = ws.addRow(['', '', '']);
-    row.height = 18;
-    dataCell(ws.getCell(`A${3+i}`), p,       bg, false, 'left');
-    dataCell(ws.getCell(`B${3+i}`), c,       bg, false, 'center');
-    dataCell(ws.getCell(`C${3+i}`), c*PRICE, bg, false, 'right');
+    const cnt = counts[p]||0;
+    const bg = i % 2 === 0 ? 'FFFFFF' : ZEBRA;
+    const r = i + 3;
+    ws[`A${r}`] = c(p,         's', bg, false, 'left');
+    ws[`B${r}`] = c(cnt,       'n', bg, false, 'center');
+    ws[`C${r}`] = c(cnt*PRICE, 'n', bg, false, 'right');
   });
 
-  // Total row
-  const totRowNum = 3 + sorted.length;
-  const totRow = ws.addRow(['', '', '']);
-  totRow.height = 20;
-  const totBg = 'FF' + TOTAL_BG;
-  dataCell(ws.getCell(`A${totRowNum}`), 'Totalt',      totBg, true, 'left');
-  dataCell(ws.getCell(`B${totRowNum}`), total,          totBg, true, 'center');
-  dataCell(ws.getCell(`C${totRowNum}`), total*PRICE,    totBg, true, 'right');
+  const tr = sorted.length + 3;
+  ws[`A${tr}`] = c('Totalt',   's', TOTAL_BG, true, 'left');
+  ws[`B${tr}`] = c(total,      'n', TOTAL_BG, true, 'center');
+  ws[`C${tr}`] = c(total*PRICE,'n', TOTAL_BG, true, 'right');
 
-  // Download
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `mineralvann_${state.selectedPeriod}.xlsx`;
-  a.click();
+  ws['!ref']    = XLS.utils.encode_range({s:{r:0,c:0}, e:{r:tr-1,c:2}});
+  ws['!cols']   = [{wch:26},{wch:10},{wch:14}];
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:2}}];
+  ws['!rows']   = [{hpt:22},{hpt:18}];
+
+  const wb = XLS.utils.book_new();
+  XLS.utils.book_append_sheet(wb, ws, label);
+  XLS.writeFile(wb, `mineralvann_${state.selectedPeriod}.xlsx`);
 }
 
 function themeToggleHtml() {
