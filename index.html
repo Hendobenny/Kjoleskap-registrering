@@ -689,15 +689,23 @@ async function exportExcel() {
     { width: 14 }
   ];
 
-  const DARK    = '1A1917';
-  const WHITE   = 'FFFFFF';
-  const ZEBRA   = 'F5F4F1';
-  const TOTAL_BG= 'E8E7E4';
+  const TITLE_BG = '92CDDC'; // original tittel-blå
+  const HDR_BG   = 'DAEEF3'; // original header-lysblå
+  const BLACK    = '000000';
+  const ZEBRA    = 'F5F4F1'; // lett grå annenhver rad
+  const TOTAL_BG = 'E8E7E4'; // grå totalrad
 
   function darkCell(cell, value, bold, hAlign) {
     cell.value = value;
-    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+DARK } };
-    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+WHITE } };
+    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+TITLE_BG } };
+    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+BLACK } };
+    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
+  }
+
+  function hdrCell(cell, value, hAlign) {
+    cell.value = value;
+    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+HDR_BG } };
+    cell.font  = { name:'Calibri', size:12, bold:false, color:{ argb:'FF'+BLACK } };
     cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
   }
 
@@ -717,9 +725,9 @@ async function exportExcel() {
   // Row 2: Headers
   const hdrRow = ws.addRow(['', '', '']);
   hdrRow.height = 20;
-  darkCell(ws.getCell('A2'), 'Navn',           false, 'left');
-  darkCell(ws.getCell('B2'), 'Antall',          false, 'center');
-  darkCell(ws.getCell('C2'), 'Beløp (kr)',      false, 'right');
+  hdrCell(ws.getCell('A2'), 'Navn',        'left');
+  hdrCell(ws.getCell('B2'), 'Antall',      'center');
+  hdrCell(ws.getCell('C2'), 'Beløp (kr)',  'right');
 
   // Data rows
   sorted.forEach((p, i) => {
