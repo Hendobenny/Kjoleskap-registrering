@@ -639,7 +639,7 @@ function renderAdminBody() {
       ${metricCards(counts,'cur-total-count','cur-total-kr')}
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;">
         <span style="font-size:0.8125rem;color:var(--c-text-2);">Sorter:</span>
-        <button class="sort-btn ${state.sortMode==='default'?'active':''}" data-mode="default" onclick="setSortMode('default')">Alfabetisk</button>
+        <button class="sort-btn ${state.sortMode==='default'?'active':''}" data-mode="default" onclick="setSortMode('default')">Standard</button>
         <button class="sort-btn ${state.sortMode==='desc'?'active':''}" data-mode="desc" onclick="setSortMode('desc')">Flest først</button>
         <button class="sort-btn ${state.sortMode==='asc'?'active':''}" data-mode="asc" onclick="setSortMode('asc')">Færrest først</button>
       </div>
