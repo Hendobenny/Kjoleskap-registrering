@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -668,64 +669,85 @@ function renderAdminBody() {
   }
 }
 
-function exportExcel() {
+async function exportExcel() {
   const counts = getCountsFor(state.selectedPeriod);
   const label = periodLabel(state.selectedPeriod);
   const sorted = [...state.people].sort((a,b)=>(counts[b]||0)-(counts[a]||0));
   const total = sorted.reduce((s,p)=>s+(counts[p]||0),0);
 
-  if (typeof XLSX === 'undefined') {
+  if (typeof ExcelJS === 'undefined') {
     alert('Excel-biblioteket lastes — prøv igjen om ett sekund.');
     return;
   }
 
-  const wb = XLSX.utils.book_new();
-  const ws = {};
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(label);
 
-  // Helper to set a cell
-  function cell(r, c, v, t) {
-    const addr = XLSX.utils.encode_cell({r, c});
-    ws[addr] = { v, t: t||'s' };
+  ws.columns = [
+    { width: 26 },
+    { width: 10 },
+    { width: 14 }
+  ];
+
+  const DARK    = '1A1917';
+  const WHITE   = 'FFFFFF';
+  const ZEBRA   = 'F5F4F1';
+  const TOTAL_BG= 'E8E7E4';
+
+  function darkCell(cell, value, bold, hAlign) {
+    cell.value = value;
+    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF'+DARK } };
+    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+WHITE } };
+    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
   }
 
-  // Row 0: Title
-  cell(0, 0, `Mineralvann \u2014 ${label}`);
+  function dataCell(cell, value, bgArgb, bold, hAlign) {
+    cell.value = value;
+    cell.fill  = { type:'pattern', pattern:'solid', fgColor:{ argb: bgArgb } };
+    cell.font  = { name:'Calibri', size:12, bold:!!bold, color:{ argb:'FF'+DARK } };
+    cell.alignment = { horizontal: hAlign||'left', vertical:'middle' };
+  }
 
-  // Row 1: empty
+  // Row 1: Title
+  const titleRow = ws.addRow(['', '', '']);
+  titleRow.height = 24;
+  ws.mergeCells('A1:C1');
+  darkCell(ws.getCell('A1'), `Mineralvann \u2014 ${label}`, true, 'center');
 
-  // Row 2: headers
-  cell(2, 0, 'Navn');
-  cell(2, 1, 'Antall');
-  cell(2, 2, 'Bel\u00f8p (kr)');
+  // Row 2: Headers
+  const hdrRow = ws.addRow(['', '', '']);
+  hdrRow.height = 20;
+  darkCell(ws.getCell('A2'), 'Navn',           false, 'left');
+  darkCell(ws.getCell('B2'), 'Antall',          false, 'center');
+  darkCell(ws.getCell('C2'), 'Beløp (kr)',      false, 'right');
 
-  // Rows 3+: data
+  // Data rows
   sorted.forEach((p, i) => {
     const c = counts[p]||0;
-    cell(3+i, 0, p);
-    cell(3+i, 1, c, 'n');
-    cell(3+i, 2, c*PRICE, 'n');
+    const bg = 'FF' + (i % 2 === 0 ? 'FFFFFF' : ZEBRA);
+    const row = ws.addRow(['', '', '']);
+    row.height = 18;
+    dataCell(ws.getCell(`A${3+i}`), p,       bg, false, 'left');
+    dataCell(ws.getCell(`B${3+i}`), c,       bg, false, 'center');
+    dataCell(ws.getCell(`C${3+i}`), c*PRICE, bg, false, 'right');
   });
 
-  // Separator row
-  const sepRow = 3 + sorted.length;
-
   // Total row
-  const totRow = sepRow + 1;
-  cell(totRow, 0, 'Totalt');
-  cell(totRow, 1, total, 'n');
-  cell(totRow, 2, total*PRICE, 'n');
+  const totRowNum = 3 + sorted.length;
+  const totRow = ws.addRow(['', '', '']);
+  totRow.height = 20;
+  const totBg = 'FF' + TOTAL_BG;
+  dataCell(ws.getCell(`A${totRowNum}`), 'Totalt',      totBg, true, 'left');
+  dataCell(ws.getCell(`B${totRowNum}`), total,          totBg, true, 'center');
+  dataCell(ws.getCell(`C${totRowNum}`), total*PRICE,    totBg, true, 'right');
 
-  // Set sheet range
-  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:totRow,c:2}});
-
-  // Column widths
-  ws['!cols'] = [{wch:24}, {wch:10}, {wch:14}];
-
-  // Merges: title spans all 3 columns
-  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:2}}];
-
-  XLSX.utils.book_append_sheet(wb, ws, label);
-  XLSX.writeFile(wb, `mineralvann_${state.selectedPeriod}.xlsx`);
+  // Download
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mineralvann_${state.selectedPeriod}.xlsx`;
+  a.click();
 }
 
 function themeToggleHtml() {
