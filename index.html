@@ -758,7 +758,7 @@ function render() {
 
   if (state.view==='home') {
     const q=state.search.toLowerCase();
-    const filtered=state.people.filter(p=>p.toLowerCase().includes(q));
+    const filtered=state.people.filter(p=>p.toLowerCase().includes(q)).sort((a,b)=>a.localeCompare(b,'nb'));
     app.innerHTML=`
       <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:1.5rem;">
         <button class="btn-ghost" onclick="setView('pin')" style="font-size:0.8125rem;padding:7px 14px;display:flex;align-items:center;gap:6px;">
