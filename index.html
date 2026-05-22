@@ -651,7 +651,7 @@ function renderAdminBody() {
         <button onclick="addPersonAdmin()" style="flex-shrink:0;">+ Legg til</button>
       </div>
       <button onclick="resetCurrentPeriod()" style="width:100%;padding:12px;color:var(--c-error);border-color:var(--c-error);background:var(--c-error-muted);font-family:'Outfit',sans-serif;font-size:0.875rem;text-align:center;">
-        Nullstill alt
+        Nullstill ${periodLabel(state.activePeriod)}
       </button>`;
   } else {
     el.innerHTML=past.length===0
