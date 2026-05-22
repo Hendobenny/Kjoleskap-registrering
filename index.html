@@ -245,7 +245,7 @@ function periodLabel(key) {
 
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
-  const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const theme = saved || 'light';
   document.documentElement.setAttribute('data-theme', theme);
 }
 function toggleTheme() {
