@@ -650,9 +650,7 @@ function renderAdminBody() {
         <input type="text" id="np" placeholder="Fullt navn" style="flex:1;border-radius:var(--radius-pill);padding-left:16px;" onkeydown="if(event.key==='Enter')addPersonAdmin()" />
         <button onclick="addPersonAdmin()" style="flex-shrink:0;">+ Legg til</button>
       </div>
-      <button onclick="resetCurrentPeriod()" style="width:100%;padding:12px;color:var(--c-error);border-color:var(--c-error);background:var(--c-error-muted);font-family:'Outfit',sans-serif;font-size:0.875rem;">
-        Nullstill ${periodLabel(state.activePeriod)} etter lønntrekk
-      </button>`;
+      `;
   } else {
     el.innerHTML=past.length===0
       ? `<div style="text-align:center;padding:3rem 1rem;color:var(--c-text-3);"><p style="font-size:0.9375rem;">Ingen tidligere perioder ennå.</p></div>`
